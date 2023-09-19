@@ -198,8 +198,11 @@ def db_open(db_file) -> Table:
 
 def db_close(table:Table):
     pager = table.pager
+    print('num pages', pager.num_pages)
     for i in range(pager.num_pages):
         # pager.pages[i] = bytearray()
+        if pager.pages[i] == None:
+            continue
         pager.flush_page(i)
     
 def do_meta_command(inputBuffer):
