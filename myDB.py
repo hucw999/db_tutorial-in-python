@@ -178,6 +178,15 @@ class Cursor():
         node[LEAF_NODE_NUM_CELLS_OFFSET:LEAF_NODE_NUM_CELLS_OFFSET+LEAF_NODE_NUM_CELLS_SIZE] = num_cells.to_bytes(LEAF_NODE_NUM_CELLS_SIZE, 'little')
 
 
+def print_leaf_node(node):
+    b_num_cells = node[LEAF_NODE_NUM_CELLS_OFFSET:LEAF_NODE_NUM_CELLS_OFFSET + LEAF_NODE_NUM_CELLS_SIZE]
+    num_cells = int.from_bytes(b_num_cells, byteorder='little')
+    for i in range(num_cells):
+        b_key = node[leaf_node_cell(i):leaf_node_cell(i)+LEAF_NODE_KEY_SIZE]
+        b_value = node[leaf_node_value(i):leaf_node_value(i)+LEAF_NODE_VALUE_SIZE]
+        key = b_key.decode('utf-8')
+        val = b_value.decode('utf-8')
+        print(f'i:{i} key:{key} value:{val}')
 
 
 def db_open(db_file) -> Table:
@@ -205,8 +214,12 @@ def db_close(table:Table):
             continue
         pager.flush_page(i)
     
-def do_meta_command(inputBuffer):
-    print(f'Unrecognized command {inputBuffer}')
+def do_meta_command(inputBuffer, table:Table):
+    if inputBuffer[0:6] == '.btree':
+        node = table.pager.get_page(0)
+        print_leaf_node(node)
+    else:
+        print(f'Unrecognized command {inputBuffer}')
 
 def prepare_statement(inputBuffer, statement:Statement):
     if inputBuffer[0:6] =='select':
@@ -275,7 +288,7 @@ if __name__ == '__main__':
     table = db_open('btree.db')
     while (inputBuffer := input('db >')) != '.exit':
         if inputBuffer[0] == '.':
-            do_meta_command(inputBuffer)
+            do_meta_command(inputBuffer, table)
         else:
             statment = Statement()
             prepare_reuslt = prepare_statement(inputBuffer, statment)
