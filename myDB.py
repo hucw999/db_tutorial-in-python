@@ -19,6 +19,7 @@ class ExecResult(Enum):
     EXECUTE_SUCCESS = 1
     EXECUTE_TABLE_FULL = 2
     EXECUTE_FAIL = 3
+    EXECUTE_DUPLICATE_KEY = 4
 
 class NodeType(Enum):
     NODE_INTERNAL = 1
@@ -94,6 +95,7 @@ class Pager():
         os.write(self.fd, self.pages[page_num])
 
 def initialize_leaf_node(page):
+    page[NODE_TYPE_OFFSET:NODE_TYPE_OFFSET + NODE_TYPE_SIZE] = (NodeType.NODE_LEAF.value).to_bytes(NODE_TYPE_SIZE, 'little')
     page[LEAF_NODE_NUM_CELLS_OFFSET:LEAF_NODE_NUM_CELLS_OFFSET+LEAF_NODE_NUM_CELLS_SIZE] = (0).to_bytes(LEAF_NODE_NUM_CELLS_SIZE, 'little')
 
 def leaf_node_cell(cell_num):
@@ -117,14 +119,23 @@ class Table():
 
         return cursor
 
-    def table_finish(self):
-        cursor = Cursor(self)
-        cursor.page_num = self.root_page_num
-        root_node = self.pager.get_page(self.root_page_num)
-        num_cells = int.from_bytes(root_node[LEAF_NODE_NUM_CELLS_OFFSET:LEAF_NODE_CELL_SIZE], byteorder='little')
-        cursor.cell_num = num_cells
-        cursor.end_of_table = True
-        return cursor
+    def find_key(self, key):
+        node = self.pager.get_page(self.root_page_num)
+        if int.from_bytes(node[NODE_TYPE_OFFSET:NODE_TYPE_OFFSET+NODE_TYPE_SIZE], byteorder='little') == NodeType.NODE_LEAF.value:
+            return leaf_node_find(self, self.root_page_num, key)
+        else:
+            print('Need to implement searching an internal node')
+
+    # def table_finish(self):
+    #     cursor = Cursor(self)
+    #     cursor.page_num = self.root_page_num
+    #     root_node = self.pager.get_page(self.root_page_num)
+    #     num_cells = int.from_bytes(root_node[LEAF_NODE_NUM_CELLS_OFFSET:LEAF_NODE_CELL_SIZE], byteorder='little')
+    #     cursor.cell_num = num_cells
+    #     cursor.end_of_table = True
+    #     return cursor
+
+
 
 class Row():
     def __init__(self) -> None:
@@ -169,14 +180,37 @@ class Cursor():
             print('debug0')
             index = num_cells
             while index > self.cell_num:
-                node[leaf_node_cell(index):leaf_node_cell(index)+LEAF_NODE_CELL_SIZE] = node[leaf_node_cell(index-1):LEAF_NODE_CELL_SIZE]
+                node[leaf_node_cell(index):leaf_node_cell(index)+LEAF_NODE_CELL_SIZE] = node[leaf_node_cell(index-1):leaf_node_cell(index-1)+LEAF_NODE_CELL_SIZE]
                 index -= 1
         b_key = bytearray(key.encode('utf-8'))
-        node[leaf_node_cell(num_cells):leaf_node_cell(num_cells)+len(b_key)] = b_key
-        serialize_row(value, node, leaf_node_value(num_cells))
+        node[leaf_node_cell(self.cell_num):leaf_node_cell(self.cell_num)+len(b_key)] = b_key
+        serialize_row(value, node, leaf_node_value(self.cell_num))
         num_cells += 1
         node[LEAF_NODE_NUM_CELLS_OFFSET:LEAF_NODE_NUM_CELLS_OFFSET+LEAF_NODE_NUM_CELLS_SIZE] = num_cells.to_bytes(LEAF_NODE_NUM_CELLS_SIZE, 'little')
 
+
+def leaf_node_find(table:Table, page_num, key):
+    node = table.pager.get_page(page_num)
+    cell_nums = int.from_bytes(node[LEAF_NODE_NUM_CELLS_OFFSET:LEAF_NODE_NUM_CELLS_OFFSET+LEAF_NODE_NUM_CELLS_SIZE], byteorder='little')
+    l = 0
+    r = cell_nums
+    cursor = Cursor(table)
+    cursor.page_num = page_num
+    while l != r:
+        mid = int((l+r) / 2)
+        print(l,r,mid)
+        mid_key = node[leaf_node_cell(mid):leaf_node_cell(mid)+LEAF_NODE_KEY_SIZE].decode('utf-8')
+        
+        if mid_key == key:
+            cursor.cell_num = mid
+            return cursor
+        elif mid_key > key:
+            r = mid 
+        else:
+            l = mid + 1
+    cursor.cell_num = l
+    print('cursor.cell_num', cursor.cell_num)
+    return cursor
 
 def print_leaf_node(node):
     b_num_cells = node[LEAF_NODE_NUM_CELLS_OFFSET:LEAF_NODE_NUM_CELLS_OFFSET + LEAF_NODE_NUM_CELLS_SIZE]
@@ -262,8 +296,17 @@ def serialize_row(value, page, row_offset):
 
 
 def execute_insert(statement:Statement, table:Table):
-    cursor = table.table_finish()
-    node = table.pager.get_page(table.root_page_num)
+    node = table.pager.get_page(0)
+    num_cells = int.from_bytes(node[LEAF_NODE_NUM_CELLS_OFFSET:LEAF_NODE_NUM_CELLS_OFFSET+LEAF_NODE_NUM_CELLS_SIZE], byteorder='little')
+    if num_cells >= LEAF_NODE_MAX_CELLS:
+        return ExecResult.EXECUTE_TABLE_FULL
+    cursor = table.find_key(statement.row_to_insert.id)
+    if cursor.cell_num < num_cells:
+        b_key_at_index = node[leaf_node_cell(cursor.cell_num):leaf_node_cell(cursor.cell_num)+LEAF_NODE_KEY_SIZE]
+        key_at_index = b_key_at_index.decode('utf-8')
+        if key_at_index == statement.row_to_insert.id:
+            return ExecResult.EXECUTE_DUPLICATE_KEY
+        
     cursor.leaf_node_insert(statement.row_to_insert.id, statement.row_to_insert)
     return ExecResult.EXECUTE_SUCCESS 
 
