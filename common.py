@@ -99,6 +99,7 @@ def internal_node_cell(node, cell_num):
 
 def internal_node_child(node, child_num):
     num_keys = int.from_bytes(node[INTERNAL_NODE_NUM_KEYS_OFFSET:INTERNAL_NODE_NUM_KEYS_OFFSET+INTERNAL_NODE_NUM_KEYS_SIZE], byteorder='little')
+    print(f'num of keys: {num_keys}')
     if num_keys < child_num:
         print(f'Tried to access child_num {child_num} > num_keys {num_keys}')
         exit(1)
@@ -108,7 +109,7 @@ def internal_node_child(node, child_num):
     else:
         cell = internal_node_cell(node, child_num)
 
-        return int.from_bytes(cell[INTERNAL_NODE_KEY_SIZE:INTERNAL_NODE_KEY_SIZE+INTERNAL_NODE_CHILD_SIZE], byteorder='little')
+        return int.from_bytes(cell[:INTERNAL_NODE_CHILD_SIZE], byteorder='little')
 
 
 def print_leaf_node(node):
@@ -119,27 +120,28 @@ def print_leaf_node(node):
         b_value = node[leaf_node_value(i):leaf_node_value(i)+LEAF_NODE_VALUE_SIZE]
         key = b_key.decode('utf-8')
         val = b_value.decode('utf-8')
-        print(f'i:{i} key:{key} value:{val}')
+        print(f'leaf node i:{i} key:{key} value:{val}')
 
 def print_tree(pager, node):
     node_type = get_node_type(node)
-    print(f'node_type:{node_type}')
+    # print(f'node_type:{node_type}')
     if node_type == NodeType.NODE_LEAF.value:
         print_leaf_node(node)
     else:
-        # num_keys = int.from_bytes(node[INTERNAL_NODE_NUM_KEYS_OFFSET:
-        #     INTERNAL_NODE_NUM_KEYS_OFFSET + INTERNAL_NODE_NUM_KEYS_SIZE], byteorder='little')
-        # for i in range(num_keys):
-        #     child_page = pager.get_page(internal_node_child(node, i))
-        #     print_tree(pager, child_page)
+        num_keys = int.from_bytes(node[INTERNAL_NODE_NUM_KEYS_OFFSET:
+            INTERNAL_NODE_NUM_KEYS_OFFSET + INTERNAL_NODE_NUM_KEYS_SIZE], byteorder='little')
+        for i in range(num_keys):
+            child_page = pager.get_page(internal_node_child(node, i))
+            # print(f'child_page:{internal_node_child(node, i)} child_num:{i}')
+            # print(get_node_type(child_page))
+            print_tree(pager, child_page)
+        
+        print(f'internal node key:{node[INTERNAL_NODE_HEADER_SIZE:INTERNAL_NODE_HEADER_SIZE+INTERNAL_NODE_KEY_SIZE].decode("utf-8")}')
         right_child_ptr = int.from_bytes(node[INTERNAL_NODE_RIGHT_CHILD_OFFSET:
             INTERNAL_NODE_RIGHT_CHILD_OFFSET+INTERNAL_NODE_RIGHT_CHILD_SIZE], byteorder='little')
-        print(f'right_child_ptr:{right_child_ptr}')
+        # print(f'right_child_ptr:{right_child_ptr}')
         right_child = pager.get_page(right_child_ptr)
         print_tree(pager, right_child)
-        
-        print('internal node ', node[INTERNAL_NODE_HEADER_SIZE:INTERNAL_NODE_HEADER_SIZE+INTERNAL_NODE_KEY_SIZE].decode('utf-8'))
-
 
 def deserialize_row(page, row_offset):
     id = page[row_offset:row_offset+4].decode()
@@ -159,14 +161,15 @@ def get_unused_page_num(pager):
     return pager.num_pages
 
 def create_new_root(table, right_child_page_num):
-    print(f'table.root_page_num:{table.root_page_num}')
+
     root = table.pager.get_page(table.root_page_num)
     right_child = table.pager.get_page(right_child_page_num)
     left_child_page_num = get_unused_page_num(table.pager)
     left_child = table.pager.get_page(left_child_page_num)
 
-    left_child = root[:]
+    left_child[:] = root[:]
     left_child[IS_ROOT_OFFSET:IS_ROOT_OFFSET+IS_ROOT_SIZE] = (0).to_bytes(IS_ROOT_SIZE, 'little')
+    # print('left_child_page_num left_child get_node_type', left_child_page_num, get_node_type(left_child))
 
     initialize_internal_node(root)
     root[IS_ROOT_OFFSET:IS_ROOT_OFFSET+IS_ROOT_SIZE] = (1).to_bytes(IS_ROOT_SIZE, 'little')
@@ -174,5 +177,9 @@ def create_new_root(table, right_child_page_num):
         = right_child_page_num.to_bytes(INTERNAL_NODE_RIGHT_CHILD_SIZE, 'little')
     root[INTERNAL_NODE_NUM_KEYS_OFFSET:INTERNAL_NODE_NUM_KEYS_OFFSET+INTERNAL_NODE_NUM_KEYS_SIZE] \
         = (1).to_bytes(INTERNAL_NODE_NUM_KEYS_SIZE, 'little')
+    root[INTERNAL_NODE_HEADER_SIZE: INTERNAL_NODE_HEADER_SIZE + INTERNAL_NODE_CELL_SIZE] \
+        = (left_child_page_num).to_bytes(INTERNAL_NODE_CHILD_SIZE, byteorder='little')
+    
+    
 
 
