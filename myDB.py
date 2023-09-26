@@ -19,6 +19,7 @@ def db_open(db_file) -> Table:
     if pager.num_pages == 0:
         root_node = pager.get_page(0)
         initialize_leaf_node(root_node)
+        root_node[IS_ROOT_OFFSET:IS_ROOT_OFFSET+IS_ROOT_SIZE] = (1).to_bytes(IS_ROOT_SIZE, 'little')
     return table
     
 def db_close(table:Table):
@@ -33,7 +34,9 @@ def db_close(table:Table):
 def do_meta_command(inputBuffer, table:Table):
     if inputBuffer[0:6] == '.btree':
         node = table.pager.get_page(0)
-        print_leaf_node(node)
+        print_tree(table.pager, node)
+    elif inputBuffer[0:6] == '.print':
+        print_constants()
     else:
         print(f'Unrecognized command {inputBuffer}')
 
@@ -52,21 +55,10 @@ def prepare_statement(inputBuffer, statement:Statement):
 
     return PrepareResult.PREPARE_SUCCESS
 
-def row_slot(table:Table, row_num):
-    row = Row()
-    # page_num = (row_num * ROW_SIZE) / PAGE_SIZE
-    page_num = int(row_num / ROWS_PER_PAGE)
-    if page_num >= len(table.pages):
-        table.pages.append(bytearray(PAGE_SIZE))
-    page = table.pages[page_num]
-    row_offset = (row_num % ROWS_PER_PAGE) * ROW_SIZE
-    return page, row_offset
-
 def execute_insert(statement:Statement, table:Table):
     node = table.pager.get_page(0)
     num_cells = int.from_bytes(node[LEAF_NODE_NUM_CELLS_OFFSET:LEAF_NODE_NUM_CELLS_OFFSET+LEAF_NODE_NUM_CELLS_SIZE], byteorder='little')
-    if num_cells >= LEAF_NODE_MAX_CELLS:
-        return ExecResult.EXECUTE_TABLE_FULL
+    
     cursor = table.find_key(statement.row_to_insert.id)
     if cursor.cell_num < num_cells:
         b_key_at_index = node[leaf_node_cell(cursor.cell_num):leaf_node_cell(cursor.cell_num)+LEAF_NODE_KEY_SIZE]

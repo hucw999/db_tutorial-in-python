@@ -2,10 +2,8 @@ from enum import Enum
 import os
 
 
-PAGE_SIZE = 4096
+PAGE_SIZE = 46
 ROW_SIZE = 32
-ROWS_PER_PAGE = 128
-MAX_ROWS = 1000
 TABLE_MAX_PAGES = 1000
 
 class PrepareResult(Enum):
@@ -21,11 +19,11 @@ class ExecResult(Enum):
     EXECUTE_DUPLICATE_KEY = 4
 
 class NodeType(Enum):
-    NODE_INTERNAL = 1
-    NODE_LEAF = 2
+    NODE_INTERNAL = 0
+    NODE_LEAF = 1
 
 
-# node header
+# node header 6
 NODE_TYPE_SIZE = 1
 NODE_TYPE_OFFSET = 0
 IS_ROOT_SIZE = 1
@@ -34,23 +32,53 @@ PARENT_POINTER_SIZE = 4
 PARENT_POINTER_OFFSET = IS_ROOT_OFFSET + IS_ROOT_SIZE
 COMMON_NODE_HEADER_SIZE =  NODE_TYPE_SIZE + IS_ROOT_SIZE + PARENT_POINTER_SIZE
 
-# leaf node header
+# leaf node header 10
 LEAF_NODE_NUM_CELLS_SIZE = 4
 LEAF_NODE_NUM_CELLS_OFFSET = COMMON_NODE_HEADER_SIZE
 LEAF_NODE_HEADER_SIZE = COMMON_NODE_HEADER_SIZE + LEAF_NODE_NUM_CELLS_SIZE
 
-# leaf node body
+# leaf node body 46
 LEAF_NODE_KEY_SIZE = 4
 LEAF_NODE_KEY_OFFSET = 0
 LEAF_NODE_VALUE_SIZE = ROW_SIZE
 LEAF_NODE_VALUE_OFFSET = LEAF_NODE_KEY_OFFSET + LEAF_NODE_KEY_SIZE
 LEAF_NODE_CELL_SIZE = LEAF_NODE_KEY_SIZE + LEAF_NODE_VALUE_SIZE
 LEAF_NODE_SPACE_FOR_CELLS = PAGE_SIZE - LEAF_NODE_HEADER_SIZE
-LEAF_NODE_MAX_CELLS = LEAF_NODE_SPACE_FOR_CELLS / LEAF_NODE_CELL_SIZE
+LEAF_NODE_MAX_CELLS = int(LEAF_NODE_SPACE_FOR_CELLS / LEAF_NODE_CELL_SIZE)
+
+# split leaf node
+LEAF_NODE_RIGHT_SPLIT_COUNT = int((LEAF_NODE_MAX_CELLS + 1) / 2)
+LEAF_NODE_LEFT_SPLIT_COUNT = LEAF_NODE_MAX_CELLS + 1 - LEAF_NODE_RIGHT_SPLIT_COUNT
+
+# Internal Node Header Layout
+INTERNAL_NODE_NUM_KEYS_SIZE = 4
+INTERNAL_NODE_NUM_KEYS_OFFSET = COMMON_NODE_HEADER_SIZE
+INTERNAL_NODE_RIGHT_CHILD_SIZE = 4
+INTERNAL_NODE_RIGHT_CHILD_OFFSET = INTERNAL_NODE_NUM_KEYS_OFFSET + INTERNAL_NODE_NUM_KEYS_SIZE
+
+INTERNAL_NODE_HEADER_SIZE = COMMON_NODE_HEADER_SIZE + INTERNAL_NODE_NUM_KEYS_SIZE + INTERNAL_NODE_RIGHT_CHILD_SIZE
+
+# Internal Node Body Layout
+INTERNAL_NODE_KEY_SIZE = 4
+INTERNAL_NODE_CHILD_SIZE = 4
+INTERNAL_NODE_CELL_SIZE = INTERNAL_NODE_CHILD_SIZE + INTERNAL_NODE_KEY_SIZE
+
+def print_constants():
+
+    print(f'LEAF_NODE_MAX_CELLS:{LEAF_NODE_MAX_CELLS}')
+
+    print(f'LEAF_NODE_RIGHT_SPLIT_COUNT:{LEAF_NODE_RIGHT_SPLIT_COUNT}')
+    print(f'LEAF_NODE_LEFT_SPLIT_COUNT:{LEAF_NODE_LEFT_SPLIT_COUNT}')
+    
 
 
 def initialize_leaf_node(node):
     set_node_type(NodeType.NODE_LEAF.value, node)
+    node[LEAF_NODE_NUM_CELLS_OFFSET:LEAF_NODE_NUM_CELLS_OFFSET+LEAF_NODE_NUM_CELLS_SIZE] = (0).to_bytes(LEAF_NODE_NUM_CELLS_SIZE, 'little')
+    node[IS_ROOT_OFFSET:IS_ROOT_OFFSET+IS_ROOT_SIZE] = (0).to_bytes(IS_ROOT_SIZE, 'little')
+
+def initialize_internal_node(node):
+    set_node_type(NodeType.NODE_INTERNAL.value, node)
     node[LEAF_NODE_NUM_CELLS_OFFSET:LEAF_NODE_NUM_CELLS_OFFSET+LEAF_NODE_NUM_CELLS_SIZE] = (0).to_bytes(LEAF_NODE_NUM_CELLS_SIZE, 'little')
 
 def leaf_node_cell(cell_num):
@@ -65,6 +93,22 @@ def get_node_type(node):
 def set_node_type(node_type:int, node):
     node[NODE_TYPE_OFFSET:NODE_TYPE_OFFSET + NODE_TYPE_SIZE] = (node_type).to_bytes(NODE_TYPE_SIZE, 'little')
 
+def internal_node_cell(node, cell_num):
+    return node[INTERNAL_NODE_HEADER_SIZE + cell_num * INTERNAL_NODE_CELL_SIZE: 
+        INTERNAL_NODE_HEADER_SIZE + cell_num * INTERNAL_NODE_CELL_SIZE + INTERNAL_NODE_CELL_SIZE]
+
+def internal_node_child(node, child_num):
+    num_keys = int.from_bytes(node[INTERNAL_NODE_NUM_KEYS_OFFSET:INTERNAL_NODE_NUM_KEYS_OFFSET+INTERNAL_NODE_NUM_KEYS_SIZE], byteorder='little')
+    if num_keys < child_num:
+        print(f'Tried to access child_num {child_num} > num_keys {num_keys}')
+        exit(1)
+    elif num_keys == child_num:
+        return int.from_bytes(node[INTERNAL_NODE_RIGHT_CHILD_OFFSET:INTERNAL_NODE_RIGHT_CHILD_OFFSET+INTERNAL_NODE_RIGHT_CHILD_SIZE]
+            , byteorder='little')
+    else:
+        cell = internal_node_cell(node, child_num)
+
+        return int.from_bytes(cell[INTERNAL_NODE_KEY_SIZE:INTERNAL_NODE_KEY_SIZE+INTERNAL_NODE_CHILD_SIZE], byteorder='little')
 
 
 def print_leaf_node(node):
@@ -77,9 +121,29 @@ def print_leaf_node(node):
         val = b_value.decode('utf-8')
         print(f'i:{i} key:{key} value:{val}')
 
+def print_tree(pager, node):
+    node_type = get_node_type(node)
+    print(f'node_type:{node_type}')
+    if node_type == NodeType.NODE_LEAF.value:
+        print_leaf_node(node)
+    else:
+        # num_keys = int.from_bytes(node[INTERNAL_NODE_NUM_KEYS_OFFSET:
+        #     INTERNAL_NODE_NUM_KEYS_OFFSET + INTERNAL_NODE_NUM_KEYS_SIZE], byteorder='little')
+        # for i in range(num_keys):
+        #     child_page = pager.get_page(internal_node_child(node, i))
+        #     print_tree(pager, child_page)
+        right_child_ptr = int.from_bytes(node[INTERNAL_NODE_RIGHT_CHILD_OFFSET:
+            INTERNAL_NODE_RIGHT_CHILD_OFFSET+INTERNAL_NODE_RIGHT_CHILD_SIZE], byteorder='little')
+        print(f'right_child_ptr:{right_child_ptr}')
+        right_child = pager.get_page(right_child_ptr)
+        print_tree(pager, right_child)
+        
+        print('internal node ', node[INTERNAL_NODE_HEADER_SIZE:INTERNAL_NODE_HEADER_SIZE+INTERNAL_NODE_KEY_SIZE].decode('utf-8'))
+
+
 def deserialize_row(page, row_offset):
-    id = page[row_offset:row_offset+16].decode()
-    username = page[row_offset+16:row_offset+32].decode()
+    id = page[row_offset:row_offset+4].decode()
+    username = page[row_offset+4:row_offset+32].decode()
     return id, username
 
 def serialize_row(value, page, row_offset):
@@ -88,4 +152,27 @@ def serialize_row(value, page, row_offset):
     b_username = bytearray(value.username.encode('utf8'))
     # page.extend(bytearray(32))
     page[row_offset:row_offset+len(b_id)] = b_id
-    page[row_offset+16:row_offset+16+len(b_username)] = b_username
+    page[row_offset+4:row_offset+4+len(b_username)] = b_username
+
+def get_unused_page_num(pager):
+    print(f'newpage:{pager.num_pages}')
+    return pager.num_pages
+
+def create_new_root(table, right_child_page_num):
+    print(f'table.root_page_num:{table.root_page_num}')
+    root = table.pager.get_page(table.root_page_num)
+    right_child = table.pager.get_page(right_child_page_num)
+    left_child_page_num = get_unused_page_num(table.pager)
+    left_child = table.pager.get_page(left_child_page_num)
+
+    left_child = root[:]
+    left_child[IS_ROOT_OFFSET:IS_ROOT_OFFSET+IS_ROOT_SIZE] = (0).to_bytes(IS_ROOT_SIZE, 'little')
+
+    initialize_internal_node(root)
+    root[IS_ROOT_OFFSET:IS_ROOT_OFFSET+IS_ROOT_SIZE] = (1).to_bytes(IS_ROOT_SIZE, 'little')
+    root[INTERNAL_NODE_RIGHT_CHILD_OFFSET:INTERNAL_NODE_RIGHT_CHILD_OFFSET+INTERNAL_NODE_RIGHT_CHILD_SIZE] \
+        = right_child_page_num.to_bytes(INTERNAL_NODE_RIGHT_CHILD_SIZE, 'little')
+    root[INTERNAL_NODE_NUM_KEYS_OFFSET:INTERNAL_NODE_NUM_KEYS_OFFSET+INTERNAL_NODE_NUM_KEYS_SIZE] \
+        = (1).to_bytes(INTERNAL_NODE_NUM_KEYS_SIZE, 'little')
+
+
