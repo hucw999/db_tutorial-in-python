@@ -33,7 +33,7 @@ def db_close(table:Table):
     
 def do_meta_command(inputBuffer, table:Table):
     if inputBuffer[0:6] == '.btree':
-        node = table.pager.get_page(0)
+        node = table.pager.get_page(table.root_page_num)
         print_tree(table.pager, node)
     elif inputBuffer[0:6] == '.print':
         print_constants()
@@ -56,7 +56,7 @@ def prepare_statement(inputBuffer, statement:Statement):
     return PrepareResult.PREPARE_SUCCESS
 
 def execute_insert(statement:Statement, table:Table):
-    node = table.pager.get_page(0)
+    node = table.pager.get_page(table.root_page_num)
     num_cells = int.from_bytes(node[LEAF_NODE_NUM_CELLS_OFFSET:LEAF_NODE_NUM_CELLS_OFFSET+LEAF_NODE_NUM_CELLS_SIZE], byteorder='little')
     
     cursor = table.find_key(statement.row_to_insert.id)

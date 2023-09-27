@@ -111,6 +111,19 @@ def internal_node_child(node, child_num):
 
         return int.from_bytes(cell[:INTERNAL_NODE_CHILD_SIZE], byteorder='little')
 
+def internal_node_key(node, cell_num):
+    return internal_node_cell(node, cell_num)[INTERNAL_NODE_CHILD_SIZE:INTERNAL_NODE_CHILD_SIZE+INTERNAL_NODE_KEY_SIZE].decode('utf-8')
+
+def get_node_max_key(node):
+    if get_node_type(node) == NodeType.NODE_INTERNAL.value:
+        keys = int.from_bytes(node[INTERNAL_NODE_NUM_KEYS_OFFSET:INTERNAL_NODE_NUM_KEYS_OFFSET+INTERNAL_NODE_NUM_KEYS_SIZE], byteorder='little')
+        return internal_node_key(node, keys-1)
+    else:
+        
+        keys = int.from_bytes(node[LEAF_NODE_NUM_CELLS_OFFSET:LEAF_NODE_NUM_CELLS_OFFSET+LEAF_NODE_NUM_CELLS_SIZE], byteorder='little')
+        return node[leaf_node_cell(keys-1):leaf_node_cell(keys-1)+LEAF_NODE_KEY_SIZE].decode('utf-8')
+           
+
 
 def print_leaf_node(node):
     b_num_cells = node[LEAF_NODE_NUM_CELLS_OFFSET:LEAF_NODE_NUM_CELLS_OFFSET + LEAF_NODE_NUM_CELLS_SIZE]
@@ -136,7 +149,7 @@ def print_tree(pager, node):
             # print(get_node_type(child_page))
             print_tree(pager, child_page)
         
-        print(f'internal node key:{node[INTERNAL_NODE_HEADER_SIZE:INTERNAL_NODE_HEADER_SIZE+INTERNAL_NODE_KEY_SIZE].decode("utf-8")}')
+            print(f'internal {i} node key:{internal_node_key(node, i)}')
         right_child_ptr = int.from_bytes(node[INTERNAL_NODE_RIGHT_CHILD_OFFSET:
             INTERNAL_NODE_RIGHT_CHILD_OFFSET+INTERNAL_NODE_RIGHT_CHILD_SIZE], byteorder='little')
         # print(f'right_child_ptr:{right_child_ptr}')
@@ -179,6 +192,12 @@ def create_new_root(table, right_child_page_num):
         = (1).to_bytes(INTERNAL_NODE_NUM_KEYS_SIZE, 'little')
     root[INTERNAL_NODE_HEADER_SIZE: INTERNAL_NODE_HEADER_SIZE + INTERNAL_NODE_CELL_SIZE] \
         = (left_child_page_num).to_bytes(INTERNAL_NODE_CHILD_SIZE, byteorder='little')
+    b_max_key = get_node_max_key(left_child).encode('utf-8')
+    print(f'maxkey:{b_max_key}')
+    root[INTERNAL_NODE_HEADER_SIZE+INTERNAL_NODE_CHILD_SIZE: \
+        INTERNAL_NODE_HEADER_SIZE+INTERNAL_NODE_CHILD_SIZE + len(b_max_key)] \
+        = b_max_key
+    print(f'inter key:{internal_node_key(root, 0)}')
     
     
 
