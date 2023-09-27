@@ -77,8 +77,9 @@ class Cursor():
                 dest_node = old_node
             if i == self.cell_num:
                 b_key = bytearray(key.encode('utf-8'))
-                dest_node[leaf_node_cell(self.cell_num):leaf_node_cell(self.cell_num)+len(b_key)] = b_key
-                serialize_row(value, dest_node, leaf_node_cell(index_within_node))
+                dest_node[leaf_node_cell(index_within_node):leaf_node_cell(index_within_node)+len(b_key)] = b_key
+                serialize_row(value, dest_node, leaf_node_value(index_within_node))
+                
             elif i > self.cell_num:
                 dest_node[leaf_node_cell(index_within_node):leaf_node_cell(index_within_node)+LEAF_NODE_CELL_SIZE] \
                     = old_node[leaf_node_cell(i-1):leaf_node_cell(i-1)+LEAF_NODE_CELL_SIZE]
@@ -89,7 +90,6 @@ class Cursor():
             
         old_node[LEAF_NODE_NUM_CELLS_OFFSET:LEAF_NODE_NUM_CELLS_OFFSET+LEAF_NODE_NUM_CELLS_SIZE] = LEAF_NODE_LEFT_SPLIT_COUNT.to_bytes(LEAF_NODE_NUM_CELLS_SIZE, 'little')
         new_node[LEAF_NODE_NUM_CELLS_OFFSET:LEAF_NODE_NUM_CELLS_OFFSET+LEAF_NODE_NUM_CELLS_SIZE] = LEAF_NODE_RIGHT_SPLIT_COUNT.to_bytes(LEAF_NODE_NUM_CELLS_SIZE, 'little')
-        
         if old_node[IS_ROOT_OFFSET:IS_ROOT_OFFSET+IS_ROOT_SIZE] == (1).to_bytes(IS_ROOT_SIZE, 'little'):
             print('debug2')
             return create_new_root(self.table, new_page_num)

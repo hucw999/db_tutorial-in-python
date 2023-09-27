@@ -193,11 +193,11 @@ def create_new_root(table, right_child_page_num):
     root[INTERNAL_NODE_HEADER_SIZE: INTERNAL_NODE_HEADER_SIZE + INTERNAL_NODE_CELL_SIZE] \
         = (left_child_page_num).to_bytes(INTERNAL_NODE_CHILD_SIZE, byteorder='little')
     b_max_key = get_node_max_key(left_child).encode('utf-8')
-    print(f'maxkey:{b_max_key}')
+
     root[INTERNAL_NODE_HEADER_SIZE+INTERNAL_NODE_CHILD_SIZE: \
         INTERNAL_NODE_HEADER_SIZE+INTERNAL_NODE_CHILD_SIZE + len(b_max_key)] \
         = b_max_key
-    print(f'inter key:{internal_node_key(root, 0)}')
+
     
     
 
