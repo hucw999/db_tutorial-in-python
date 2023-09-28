@@ -2,7 +2,7 @@ from common import *
 
 def leaf_node_find(table, page_num, key):
     node = table.pager.get_page(page_num)
-    cell_nums = int.from_bytes(node[LEAF_NODE_NUM_CELLS_OFFSET:LEAF_NODE_NUM_CELLS_OFFSET+LEAF_NODE_NUM_CELLS_SIZE], byteorder='little')
+    cell_nums = get_leaf_num_cells(node)
     l = 0
     r = cell_nums
     cursor = Cursor(table)
@@ -39,13 +39,13 @@ class Cursor():
     def advance(self):
         page = self.table.pager.get_page(self.page_num)
         self.cell_num += 1
-        num_cells = int.from_bytes(page[LEAF_NODE_NUM_CELLS_OFFSET:LEAF_NODE_NUM_CELLS_OFFSET+LEAF_NODE_NUM_CELLS_SIZE], byteorder='little')
+        num_cells = get_leaf_num_cells(self.page)
         if self.cell_num >= num_cells:
             self.end_of_table = True
 
     def leaf_node_insert(self, key, value):
         node = self.table.pager.get_page(self.page_num)
-        num_cells = int.from_bytes(node[LEAF_NODE_NUM_CELLS_OFFSET:LEAF_NODE_NUM_CELLS_OFFSET+LEAF_NODE_NUM_CELLS_SIZE], byteorder='little')
+        num_cells = get_leaf_num_cells(node)
         if num_cells >= LEAF_NODE_MAX_CELLS:
             self.leaf_node_split_insert(key, value)
             return

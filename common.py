@@ -2,7 +2,7 @@ from enum import Enum
 import os
 
 
-PAGE_SIZE = 46
+PAGE_SIZE = 92
 ROW_SIZE = 32
 TABLE_MAX_PAGES = 1000
 
@@ -87,6 +87,10 @@ def leaf_node_cell(cell_num):
 def leaf_node_value(cell_num):
     return LEAF_NODE_HEADER_SIZE + cell_num * LEAF_NODE_CELL_SIZE + LEAF_NODE_VALUE_OFFSET
 
+def get_leaf_num_cells(node) -> int:
+    num_cells = int.from_bytes(node[LEAF_NODE_NUM_CELLS_OFFSET:LEAF_NODE_NUM_CELLS_OFFSET+LEAF_NODE_NUM_CELLS_SIZE], byteorder='little')
+    return num_cells
+
 def get_node_type(node):
     return int.from_bytes(node[NODE_TYPE_OFFSET:NODE_TYPE_OFFSET + NODE_TYPE_SIZE], byteorder='little')
 
@@ -97,37 +101,43 @@ def internal_node_cell(node, cell_num):
     return node[INTERNAL_NODE_HEADER_SIZE + cell_num * INTERNAL_NODE_CELL_SIZE: 
         INTERNAL_NODE_HEADER_SIZE + cell_num * INTERNAL_NODE_CELL_SIZE + INTERNAL_NODE_CELL_SIZE]
 
-def internal_node_child(node, child_num):
+def get_internal_node_num_keys(node) -> int:
     num_keys = int.from_bytes(node[INTERNAL_NODE_NUM_KEYS_OFFSET:INTERNAL_NODE_NUM_KEYS_OFFSET+INTERNAL_NODE_NUM_KEYS_SIZE], byteorder='little')
+    return num_keys
+
+def internal_node_child(node, child_num):
+    num_keys = get_internal_node_num_keys(node)
     print(f'num of keys: {num_keys}')
     if num_keys < child_num:
         print(f'Tried to access child_num {child_num} > num_keys {num_keys}')
         exit(1)
     elif num_keys == child_num:
-        return int.from_bytes(node[INTERNAL_NODE_RIGHT_CHILD_OFFSET:INTERNAL_NODE_RIGHT_CHILD_OFFSET+INTERNAL_NODE_RIGHT_CHILD_SIZE]
-            , byteorder='little')
+        return int.from_bytes(internal_node_right_child(node), byteorder='little')
     else:
         cell = internal_node_cell(node, child_num)
 
         return int.from_bytes(cell[:INTERNAL_NODE_CHILD_SIZE], byteorder='little')
+
+def internal_node_right_child(node):
+    return node[INTERNAL_NODE_RIGHT_CHILD_OFFSET:INTERNAL_NODE_RIGHT_CHILD_OFFSET+INTERNAL_NODE_RIGHT_CHILD_SIZE]
+
 
 def internal_node_key(node, cell_num):
     return internal_node_cell(node, cell_num)[INTERNAL_NODE_CHILD_SIZE:INTERNAL_NODE_CHILD_SIZE+INTERNAL_NODE_KEY_SIZE].decode('utf-8')
 
 def get_node_max_key(node):
     if get_node_type(node) == NodeType.NODE_INTERNAL.value:
-        keys = int.from_bytes(node[INTERNAL_NODE_NUM_KEYS_OFFSET:INTERNAL_NODE_NUM_KEYS_OFFSET+INTERNAL_NODE_NUM_KEYS_SIZE], byteorder='little')
+        
+        keys = get_internal_node_num_keys(node)
         return internal_node_key(node, keys-1)
     else:
-        
-        keys = int.from_bytes(node[LEAF_NODE_NUM_CELLS_OFFSET:LEAF_NODE_NUM_CELLS_OFFSET+LEAF_NODE_NUM_CELLS_SIZE], byteorder='little')
-        return node[leaf_node_cell(keys-1):leaf_node_cell(keys-1)+LEAF_NODE_KEY_SIZE].decode('utf-8')
+        num_cells = get_leaf_num_cells(node)
+        return node[leaf_node_cell(num_cells-1):leaf_node_cell(num_cells-1)+LEAF_NODE_KEY_SIZE].decode('utf-8')
            
 
 
 def print_leaf_node(node):
-    b_num_cells = node[LEAF_NODE_NUM_CELLS_OFFSET:LEAF_NODE_NUM_CELLS_OFFSET + LEAF_NODE_NUM_CELLS_SIZE]
-    num_cells = int.from_bytes(b_num_cells, byteorder='little')
+    num_cells = get_leaf_num_cells(node)
     for i in range(num_cells):
         b_key = node[leaf_node_cell(i):leaf_node_cell(i)+LEAF_NODE_KEY_SIZE]
         b_value = node[leaf_node_value(i):leaf_node_value(i)+LEAF_NODE_VALUE_SIZE]
@@ -141,8 +151,7 @@ def print_tree(pager, node):
     if node_type == NodeType.NODE_LEAF.value:
         print_leaf_node(node)
     else:
-        num_keys = int.from_bytes(node[INTERNAL_NODE_NUM_KEYS_OFFSET:
-            INTERNAL_NODE_NUM_KEYS_OFFSET + INTERNAL_NODE_NUM_KEYS_SIZE], byteorder='little')
+        num_keys = get_internal_node_num_keys(node)
         for i in range(num_keys):
             child_page = pager.get_page(internal_node_child(node, i))
             # print(f'child_page:{internal_node_child(node, i)} child_num:{i}')
@@ -150,8 +159,7 @@ def print_tree(pager, node):
             print_tree(pager, child_page)
         
             print(f'internal {i} node key:{internal_node_key(node, i)}')
-        right_child_ptr = int.from_bytes(node[INTERNAL_NODE_RIGHT_CHILD_OFFSET:
-            INTERNAL_NODE_RIGHT_CHILD_OFFSET+INTERNAL_NODE_RIGHT_CHILD_SIZE], byteorder='little')
+        right_child_ptr = int.from_bytes(internal_node_right_child(node), byteorder='little')
         # print(f'right_child_ptr:{right_child_ptr}')
         right_child = pager.get_page(right_child_ptr)
         print_tree(pager, right_child)
