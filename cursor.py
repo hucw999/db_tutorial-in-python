@@ -23,6 +23,29 @@ def leaf_node_find(table, page_num, key):
     print('cursor.cell_num', cursor.cell_num)
     return cursor
 
+def internal_node_find(table, page_num, key):
+    node = table.pager.get_page(page_num)
+    num_keys = get_internal_node_num_keys(node)
+    cursor = Cursor(table)
+    cursor.page_num = page_num
+
+    l = 0
+    r = num_keys
+    while l < r:
+        mid = int((l+r) / 2)
+        mid_key = internal_node_key(node, mid)
+        if mid_key >= key:
+            r = mid
+        else:
+            l = mid + 1
+    child_num = internal_node_child(node, l)
+    child_node = table.pager.get_page(child_num)
+    if get_node_type(child_node) == NodeType.NODE_INTERNAL.value:
+        return internal_node_find(table, child_num, key)
+    else:
+        return leaf_node_find(table, child_num, key)
+        
+
 class Cursor():
     def __init__(self, table) -> None:
         self.table = table
@@ -39,9 +62,14 @@ class Cursor():
     def advance(self):
         page = self.table.pager.get_page(self.page_num)
         self.cell_num += 1
-        num_cells = get_leaf_num_cells(self.page)
+        num_cells = get_leaf_num_cells(page)
         if self.cell_num >= num_cells:
-            self.end_of_table = True
+            next_page_num = get_leaf_node_next_leaf(page)
+            if next_page_num == 0:
+                self.end_of_table = True
+            else:
+                self.page_num= next_page_num
+                self.cell_num = 0
 
     def leaf_node_insert(self, key, value):
         node = self.table.pager.get_page(self.page_num)
@@ -67,6 +95,9 @@ class Cursor():
         new_page_num = get_unused_page_num(self.table.pager)
         new_node = self.table.pager.get_page(new_page_num)
         initialize_leaf_node(new_node)
+        old_next_page_num = get_leaf_node_next_leaf(old_node)
+        new_node[LEAF_NODE_NEXT_LEAF_OFFSET:LEAF_NODE_NEXT_LEAF_OFFSET+LEAF_NODE_NEXT_LEAF_SIZE] = (old_next_page_num).to_bytes(LEAF_NODE_NEXT_LEAF_SIZE, 'little')
+        old_node[LEAF_NODE_NEXT_LEAF_OFFSET:LEAF_NODE_NEXT_LEAF_OFFSET+LEAF_NODE_NEXT_LEAF_SIZE] = (new_page_num).to_bytes(LEAF_NODE_NEXT_LEAF_SIZE, 'little')
 
         for i in range(LEAF_NODE_MAX_CELLS, -1, -1):
             print(f'i: {i}')

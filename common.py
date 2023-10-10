@@ -35,7 +35,9 @@ COMMON_NODE_HEADER_SIZE =  NODE_TYPE_SIZE + IS_ROOT_SIZE + PARENT_POINTER_SIZE
 # leaf node header 10
 LEAF_NODE_NUM_CELLS_SIZE = 4
 LEAF_NODE_NUM_CELLS_OFFSET = COMMON_NODE_HEADER_SIZE
-LEAF_NODE_HEADER_SIZE = COMMON_NODE_HEADER_SIZE + LEAF_NODE_NUM_CELLS_SIZE
+LEAF_NODE_NEXT_LEAF_SIZE = 4
+LEAF_NODE_NEXT_LEAF_OFFSET = LEAF_NODE_NUM_CELLS_OFFSET + LEAF_NODE_NUM_CELLS_SIZE
+LEAF_NODE_HEADER_SIZE = COMMON_NODE_HEADER_SIZE + LEAF_NODE_NUM_CELLS_SIZE + LEAF_NODE_NEXT_LEAF_SIZE
 
 # leaf node body 46
 LEAF_NODE_KEY_SIZE = 4
@@ -76,6 +78,7 @@ def initialize_leaf_node(node):
     set_node_type(NodeType.NODE_LEAF.value, node)
     node[LEAF_NODE_NUM_CELLS_OFFSET:LEAF_NODE_NUM_CELLS_OFFSET+LEAF_NODE_NUM_CELLS_SIZE] = (0).to_bytes(LEAF_NODE_NUM_CELLS_SIZE, 'little')
     node[IS_ROOT_OFFSET:IS_ROOT_OFFSET+IS_ROOT_SIZE] = (0).to_bytes(IS_ROOT_SIZE, 'little')
+    node[LEAF_NODE_NEXT_LEAF_OFFSET:LEAF_NODE_NEXT_LEAF_OFFSET+LEAF_NODE_NEXT_LEAF_SIZE] = (0).to_bytes(LEAF_NODE_NEXT_LEAF_SIZE, 'little')
 
 def initialize_internal_node(node):
     set_node_type(NodeType.NODE_INTERNAL.value, node)
@@ -86,6 +89,9 @@ def leaf_node_cell(cell_num):
 
 def leaf_node_value(cell_num):
     return LEAF_NODE_HEADER_SIZE + cell_num * LEAF_NODE_CELL_SIZE + LEAF_NODE_VALUE_OFFSET
+
+def get_leaf_node_next_leaf(node):
+    return int.from_bytes(node[LEAF_NODE_NEXT_LEAF_OFFSET:LEAF_NODE_NEXT_LEAF_OFFSET+LEAF_NODE_NEXT_LEAF_SIZE], 'little')
 
 def get_leaf_num_cells(node) -> int:
     num_cells = int.from_bytes(node[LEAF_NODE_NUM_CELLS_OFFSET:LEAF_NODE_NUM_CELLS_OFFSET+LEAF_NODE_NUM_CELLS_SIZE], byteorder='little')
