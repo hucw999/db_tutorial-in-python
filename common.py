@@ -2,9 +2,10 @@ from enum import Enum
 import os
 
 
-PAGE_SIZE = 92
+PAGE_SIZE = 184
 ROW_SIZE = 32
 TABLE_MAX_PAGES = 1000
+INTERNAL_NODE_MAX_CELLS = 3
 
 class PrepareResult(Enum):
     PREPARE_SUCCESS = 1
@@ -103,9 +104,14 @@ def get_node_type(node):
 def set_node_type(node_type:int, node):
     node[NODE_TYPE_OFFSET:NODE_TYPE_OFFSET + NODE_TYPE_SIZE] = (node_type).to_bytes(NODE_TYPE_SIZE, 'little')
 
+def get_parent_page_num(node):
+    return int.from_bytes(node[PARENT_POINTER_OFFSET:PARENT_POINTER_OFFSET+PARENT_POINTER_SIZE], byteorder='little')
+
 def internal_node_cell(node, cell_num):
     return node[INTERNAL_NODE_HEADER_SIZE + cell_num * INTERNAL_NODE_CELL_SIZE: 
         INTERNAL_NODE_HEADER_SIZE + cell_num * INTERNAL_NODE_CELL_SIZE + INTERNAL_NODE_CELL_SIZE]
+
+
 
 def get_internal_node_num_keys(node) -> int:
     num_keys = int.from_bytes(node[INTERNAL_NODE_NUM_KEYS_OFFSET:INTERNAL_NODE_NUM_KEYS_OFFSET+INTERNAL_NODE_NUM_KEYS_SIZE], byteorder='little')
@@ -124,12 +130,26 @@ def internal_node_child(node, child_num):
 
         return int.from_bytes(cell[:INTERNAL_NODE_CHILD_SIZE], byteorder='little')
 
+def set_internal_node_child(node, child_num, child_page_num):
+    node[INTERNAL_NODE_HEADER_SIZE + child_num * INTERNAL_NODE_CELL_SIZE: \
+        INTERNAL_NODE_HEADER_SIZE + child_num * INTERNAL_NODE_CELL_SIZE + INTERNAL_NODE_CHILD_SIZE] = child_page_num.to_bytes(INTERNAL_NODE_CHILD_SIZE, 'little')
+
+def set_internal_node_key(node, child_num, key):
+    b_key = key.encode('utf-8')
+    node[INTERNAL_NODE_HEADER_SIZE + child_num * INTERNAL_NODE_CELL_SIZE + INTERNAL_NODE_CHILD_SIZE: \
+        INTERNAL_NODE_HEADER_SIZE + child_num * INTERNAL_NODE_CELL_SIZE + INTERNAL_NODE_CHILD_SIZE + len(b_key) ] \
+        = b_key
+
 def internal_node_right_child(node):
     return node[INTERNAL_NODE_RIGHT_CHILD_OFFSET:INTERNAL_NODE_RIGHT_CHILD_OFFSET+INTERNAL_NODE_RIGHT_CHILD_SIZE]
 
 
 def internal_node_key(node, cell_num):
     return internal_node_cell(node, cell_num)[INTERNAL_NODE_CHILD_SIZE:INTERNAL_NODE_CHILD_SIZE+INTERNAL_NODE_KEY_SIZE].decode('utf-8')
+
+
+
+
 
 def get_node_max_key(node):
     if get_node_type(node) == NodeType.NODE_INTERNAL.value:
@@ -155,6 +175,7 @@ def print_tree(pager, node):
     node_type = get_node_type(node)
     # print(f'node_type:{node_type}')
     if node_type == NodeType.NODE_LEAF.value:
+        print('leaf node')
         print_leaf_node(node)
     else:
         num_keys = get_internal_node_num_keys(node)
@@ -168,6 +189,7 @@ def print_tree(pager, node):
         right_child_ptr = int.from_bytes(internal_node_right_child(node), byteorder='little')
         # print(f'right_child_ptr:{right_child_ptr}')
         right_child = pager.get_page(right_child_ptr)
+        print('right child')
         print_tree(pager, right_child)
 
 def deserialize_row(page, row_offset):
@@ -212,6 +234,8 @@ def create_new_root(table, right_child_page_num):
         INTERNAL_NODE_HEADER_SIZE+INTERNAL_NODE_CHILD_SIZE + len(b_max_key)] \
         = b_max_key
 
+    left_child[PARENT_POINTER_OFFSET:PARENT_POINTER_OFFSET+PARENT_POINTER_SIZE] = (table.root_page_num).to_bytes(PARENT_POINTER_SIZE, byteorder='little')
+    right_child[PARENT_POINTER_OFFSET:PARENT_POINTER_OFFSET+PARENT_POINTER_SIZE] = (table.root_page_num).to_bytes(PARENT_POINTER_SIZE, byteorder='little')
     
     
 

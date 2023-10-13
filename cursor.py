@@ -1,3 +1,4 @@
+from secrets import token_bytes
 from common import *
 
 def leaf_node_find(table, page_num, key):
@@ -23,12 +24,15 @@ def leaf_node_find(table, page_num, key):
     print('cursor.cell_num', cursor.cell_num)
     return cursor
 
-def internal_node_find(table, page_num, key):
-    node = table.pager.get_page(page_num)
-    num_keys = get_internal_node_num_keys(node)
-    cursor = Cursor(table)
-    cursor.page_num = page_num
+def update_internal_node_key(node, old_key, new_key):
+    old_child_index = internal_node_find_child(node, old_key)
+    b_new_key = new_key.encode('utf-8')
+    node[INTERNAL_NODE_HEADER_SIZE + old_child_index * INTERNAL_NODE_CELL_SIZE + INTERNAL_NODE_CHILD_SIZE:
+        INTERNAL_NODE_HEADER_SIZE + old_child_index * INTERNAL_NODE_CELL_SIZE + INTERNAL_NODE_CHILD_SIZE + len(b_new_key)] \
+        = b_new_key
 
+def internal_node_find_child(node, key):
+    num_keys = get_internal_node_num_keys(node)
     l = 0
     r = num_keys
     while l < r:
@@ -38,13 +42,45 @@ def internal_node_find(table, page_num, key):
             r = mid
         else:
             l = mid + 1
-    child_num = internal_node_child(node, l)
+    return l
+
+def internal_node_find(table, page_num, key):
+    node = table.pager.get_page(page_num)
+    child_index = internal_node_find_child(node, key)
+    child_num = internal_node_child(node, child_index)
     child_node = table.pager.get_page(child_num)
     if get_node_type(child_node) == NodeType.NODE_INTERNAL.value:
         return internal_node_find(table, child_num, key)
     else:
         return leaf_node_find(table, child_num, key)
         
+def internal_node_insert(table, parent_page_num, child_page_num):
+    parent = table.pager.get_page(parent_page_num)
+    child = table.pager.get_page(child_page_num)
+    child_max_key = get_node_max_key(child)
+    index =  internal_node_find_child(parent, child_max_key)
+
+    original_num_keys = get_internal_node_num_keys(parent)
+    parent[INTERNAL_NODE_NUM_KEYS_OFFSET:INTERNAL_NODE_NUM_KEYS_OFFSET+INTERNAL_NODE_NUM_KEYS_SIZE] \
+      = (original_num_keys + 1).to_bytes(INTERNAL_NODE_NUM_KEYS_SIZE, 'little')
+    if original_num_keys >= INTERNAL_NODE_MAX_CELLS:
+        raise Exception('Need to implement splitting internal node')
+    right_child_page_num = int.from_bytes(internal_node_right_child(parent), byteorder='little')
+    right_child = table.pager.get_page(right_child_page_num)
+    
+    if child_max_key > get_node_max_key(right_child):
+        set_internal_node_child(parent, original_num_keys, right_child_page_num)
+        set_internal_node_key(parent, original_num_keys, get_node_max_key(right_child))
+        parent[INTERNAL_NODE_RIGHT_CHILD_OFFSET:INTERNAL_NODE_RIGHT_CHILD_OFFSET+INTERNAL_NODE_RIGHT_CHILD_SIZE] = \
+            child_page_num.to_bytes(INTERNAL_NODE_RIGHT_CHILD_SIZE, 'little')
+    else:
+        for i in range(original_num_keys, index, -1):
+            parent[INTERNAL_NODE_HEADER_SIZE + i * INTERNAL_NODE_CELL_SIZE: 
+        INTERNAL_NODE_HEADER_SIZE + i * INTERNAL_NODE_CELL_SIZE + INTERNAL_NODE_CELL_SIZE] = \
+            internal_node_cell(parent, i-1)
+        set_internal_node_child(parent, index, child_page_num)
+        set_internal_node_key(parent, index, child_max_key)
+    
 
 class Cursor():
     def __init__(self, table) -> None:
@@ -92,9 +128,11 @@ class Cursor():
 
     def leaf_node_split_insert(self, key, value):
         old_node = self.table.pager.get_page(self.page_num)
+        old_max = get_node_max_key(old_node)
         new_page_num = get_unused_page_num(self.table.pager)
         new_node = self.table.pager.get_page(new_page_num)
         initialize_leaf_node(new_node)
+        new_node[PARENT_POINTER_OFFSET:PARENT_POINTER_OFFSET+PARENT_POINTER_SIZE] = old_node[PARENT_POINTER_OFFSET:PARENT_POINTER_OFFSET+PARENT_POINTER_SIZE]
         old_next_page_num = get_leaf_node_next_leaf(old_node)
         new_node[LEAF_NODE_NEXT_LEAF_OFFSET:LEAF_NODE_NEXT_LEAF_OFFSET+LEAF_NODE_NEXT_LEAF_SIZE] = (old_next_page_num).to_bytes(LEAF_NODE_NEXT_LEAF_SIZE, 'little')
         old_node[LEAF_NODE_NEXT_LEAF_OFFSET:LEAF_NODE_NEXT_LEAF_OFFSET+LEAF_NODE_NEXT_LEAF_SIZE] = (new_page_num).to_bytes(LEAF_NODE_NEXT_LEAF_SIZE, 'little')
@@ -124,3 +162,9 @@ class Cursor():
         if old_node[IS_ROOT_OFFSET:IS_ROOT_OFFSET+IS_ROOT_SIZE] == (1).to_bytes(IS_ROOT_SIZE, 'little'):
             print('debug2')
             return create_new_root(self.table, new_page_num)
+        else:
+            parent_page_num = get_parent_page_num(old_node)
+            new_max = get_node_max_key(old_node)
+            parent_node = self.table.pager.get_page(parent_page_num)
+            update_internal_node_key(parent_node, old_max, new_max)
+            internal_node_insert(self.table, parent_page_num, new_page_num)
