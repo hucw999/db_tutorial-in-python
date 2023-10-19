@@ -24,11 +24,12 @@ class Pager():
     
     
     def get_page(self, page_num):
-        page = bytearray(PAGE_SIZE)
-        num_pages = int(self.file_lenth / PAGE_SIZE)
-        if self.file_lenth % PAGE_SIZE != 0:
-            num_pages += 1
+        
         if self.pages[page_num] == None:
+            page = bytearray(PAGE_SIZE)
+            num_pages = int(self.file_lenth / PAGE_SIZE)
+            if self.file_lenth % PAGE_SIZE != 0:
+                num_pages += 1
             if num_pages > page_num:
                 os.lseek(self.fd, page_num * PAGE_SIZE, os.SEEK_SET)
                 self.pages[page_num] = bytearray(os.read(self.fd, PAGE_SIZE))
