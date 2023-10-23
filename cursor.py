@@ -58,6 +58,7 @@ def internal_node_split_and_insert(table, parent_page_num, child_page_num):
     print('internel node split and insert')
     old_page_num = parent_page_num
     old_node = table.pager.get_page(old_page_num)
+    print(f'6,1 0 value{internal_node_child(old_node, 1)}')
     old_max = get_node_max_key(table.pager, old_node)
     
     child = table.pager.get_page(child_page_num)
@@ -69,6 +70,7 @@ def internal_node_split_and_insert(table, parent_page_num, child_page_num):
 
     if splitting_root == 1:
         create_new_root(table, new_page_num)
+        print(f'6,1 1 value{internal_node_child(old_node, 1)}')
         parent = table.pager.get_page(table.root_page_num)
         old_page_num = internal_node_child(parent, 0)
         old_node = table.pager.get_page(old_page_num)
@@ -77,6 +79,8 @@ def internal_node_split_and_insert(table, parent_page_num, child_page_num):
         parent = table.pager.get_page(get_parent_page_num(old_node))
         new_node = table.pager.get_page(new_page_num)
         initialize_internal_node(new_node)
+
+    print(f'6,1 2 value{internal_node_child(old_node, 1)}')
     
     old_num_keys = get_internal_node_num_keys(old_node)
     cur_page_num = int.from_bytes(internal_node_right_child(old_node), byteorder='little')
@@ -84,9 +88,13 @@ def internal_node_split_and_insert(table, parent_page_num, child_page_num):
 
     # First put right child into new node and set right child of old node to invalid page number
     internal_node_insert(table, new_page_num, cur_page_num)
+    print(f'6,1 3 value{internal_node_child(old_node, 1)}')
     cur_node[PARENT_POINTER_OFFSET:PARENT_POINTER_OFFSET+PARENT_POINTER_SIZE] = new_page_num.to_bytes(PARENT_POINTER_SIZE, byteorder='little')
+    print(f'6,1 4 value{internal_node_child(old_node, 1)}')
+    print(int.from_bytes(internal_node_right_child(old_node), byteorder='little'))
     set_internal_node_right_child(old_node, INVALID_PAGE_NUM)
-
+    print(int.from_bytes(internal_node_right_child(old_node), byteorder='little'))
+    print(f'6,1 5 value{internal_node_child(old_node, 1)}')
     # For each key until you get to the middle key, move the key and the child to the new node
     for i in range(INTERNAL_NODE_MAX_CELLS-1, int((INTERNAL_NODE_MAX_CELLS) / 2), -1):
         cur_page_num = internal_node_child(old_node, i)
@@ -129,6 +137,7 @@ def internal_node_insert(table, parent_page_num, child_page_num):
     if right_child_page_num == INVALID_PAGE_NUM:
         set_internal_node_right_child(parent, child_page_num)
         return
+    print(f'right_child_page_num:{right_child_page_num}')
     right_child = table.pager.get_page(right_child_page_num)
 
 

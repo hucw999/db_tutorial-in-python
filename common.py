@@ -6,7 +6,7 @@ PAGE_SIZE = 92
 ROW_SIZE = 32
 TABLE_MAX_PAGES = 1000
 INTERNAL_NODE_MAX_CELLS = 2
-INVALID_PAGE_NUM = 9999
+INVALID_PAGE_NUM = 999
 
 class PrepareResult(Enum):
     PREPARE_SUCCESS = 1
@@ -153,7 +153,7 @@ def internal_node_right_child(node):
     return node[INTERNAL_NODE_RIGHT_CHILD_OFFSET:INTERNAL_NODE_RIGHT_CHILD_OFFSET+INTERNAL_NODE_RIGHT_CHILD_SIZE]
 
 def set_internal_node_right_child(node, child_page_num):
-    node[INTERNAL_NODE_HEADER_SIZE + INTERNAL_NODE_RIGHT_CHILD_OFFSET:INTERNAL_NODE_HEADER_SIZE + INTERNAL_NODE_RIGHT_CHILD_OFFSET + INTERNAL_NODE_RIGHT_CHILD_SIZE] \
+    node[INTERNAL_NODE_RIGHT_CHILD_OFFSET:INTERNAL_NODE_RIGHT_CHILD_OFFSET + INTERNAL_NODE_RIGHT_CHILD_SIZE] \
         = child_page_num.to_bytes(INTERNAL_NODE_RIGHT_CHILD_SIZE, 'little')
 
 
@@ -238,11 +238,12 @@ def create_new_root(table, right_child_page_num):
     left_child[IS_ROOT_OFFSET:IS_ROOT_OFFSET+IS_ROOT_SIZE] = (0).to_bytes(IS_ROOT_SIZE, 'little')
     # print('left_child_page_num left_child get_node_type', left_child_page_num, get_node_type(left_child))
 
-    if get_node_type(root) == NodeType.NODE_INTERNAL.value:
+    if get_node_type(left_child) == NodeType.NODE_INTERNAL.value:
         for i in range(get_internal_node_num_keys(left_child)):
             child = table.pager.get_page(internal_node_child(left_child, i))
             child[PARENT_POINTER_OFFSET:PARENT_POINTER_OFFSET+PARENT_POINTER_SIZE] = left_child_page_num.to_bytes(PARENT_POINTER_SIZE, 'little')
         child_ptr = int.from_bytes(internal_node_right_child(left_child),byteorder='little')
+        print(f'child_ptr:{child_ptr}')
         child = table.pager.get_page(child_ptr)
         child[PARENT_POINTER_OFFSET:PARENT_POINTER_OFFSET+PARENT_POINTER_SIZE] = left_child_page_num.to_bytes(PARENT_POINTER_SIZE, 'little')
             
