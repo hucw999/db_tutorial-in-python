@@ -174,21 +174,23 @@ def get_node_max_key(pager, node):
         return node[leaf_node_cell(num_cells-1):leaf_node_cell(num_cells-1)+LEAF_NODE_KEY_SIZE].decode('utf-8')
            
 
-def print_leaf_node(node):
+def print_leaf_node(node, level):
     num_cells = get_leaf_num_cells(node)
     for i in range(num_cells):
         b_key = node[leaf_node_cell(i):leaf_node_cell(i)+LEAF_NODE_KEY_SIZE]
         b_value = node[leaf_node_value(i):leaf_node_value(i)+LEAF_NODE_VALUE_SIZE]
         key = b_key.decode('utf-8')
         val = b_value.decode('utf-8')
-        print(f'leaf node i:{i} key:{key} value:{val}')
+        hold = ''
+        for j in range(level):
+            hold = hold + '--'
+        print(f'{hold}leaf node i:{i} key:{key} value:{val}')
 
-def print_tree(pager, node):
+def print_tree(pager, node, level=0):
     node_type = get_node_type(node)
     # print(f'node_type:{node_type}')
     if node_type == NodeType.NODE_LEAF.value:
-        print('leaf node')
-        print_leaf_node(node)
+        print_leaf_node(node, level)
     else:
         num_keys = get_internal_node_num_keys(node)
         if num_keys > 0 :
@@ -197,14 +199,15 @@ def print_tree(pager, node):
                 child_page = pager.get_page(child_ptr)
                 # print(f'child_page:{internal_node_child(node, i)} child_num:{i}')
                 # print(get_node_type(child_page))
-                print_tree(pager, child_page)
-            
-                print(f'internal {i} node key:{internal_node_key(node, i)}')
+                hold = ''
+                for j in range(level):
+                    hold = hold + '--'
+                print_tree(pager, child_page, level+1)
+                print(f'{hold}internal {i} node key:{internal_node_key(node, i)}')
             right_child_ptr = int.from_bytes(internal_node_right_child(node), byteorder='little')
             # print(f'right_child_ptr:{right_child_ptr}')
             right_child = pager.get_page(right_child_ptr)
-            print('right child')
-            print_tree(pager, right_child)
+            print_tree(pager, right_child, level+1)
 
 def deserialize_row(page, row_offset):
     id = page[row_offset:row_offset+4].decode()
