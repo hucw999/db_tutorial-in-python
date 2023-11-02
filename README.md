@@ -1,5 +1,5 @@
 # myDB
-Create a database from scratch based on db_tutorial step by step
+Create a database from scratch based on db_tutorial step by step.
 I just set two raw, id and username, and id is the primary key
 ## test
 
