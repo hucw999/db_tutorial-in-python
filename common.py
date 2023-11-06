@@ -216,8 +216,8 @@ def deserialize_row(page, row_offset):
 
 def serialize_row(value, page, row_offset):
 
-    b_id = bytearray(value.id.encode('utf8'))
-    b_username = bytearray(value.username.encode('utf8'))
+    b_id = value.id.encode('utf8')
+    b_username = value.username.encode('utf8')
     # page.extend(bytearray(32))
     page[row_offset:row_offset+len(b_id)] = b_id
     page[row_offset+4:row_offset+4+len(b_username)] = b_username

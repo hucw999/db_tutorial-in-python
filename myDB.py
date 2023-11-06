@@ -63,8 +63,11 @@ def execute_insert(statement:Statement, table:Table):
     if cursor.cell_num < num_cells:
         b_key_at_index = node[leaf_node_cell(cursor.cell_num):leaf_node_cell(cursor.cell_num)+LEAF_NODE_KEY_SIZE]
         key_at_index = b_key_at_index.decode('utf-8')
-        if key_at_index == statement.row_to_insert.id:
+
+        if key_at_index.strip('\x00') == statement.row_to_insert.id:
             return ExecResult.EXECUTE_DUPLICATE_KEY
+
+
         
     cursor.leaf_node_insert(statement.row_to_insert.id, statement.row_to_insert)
     return ExecResult.EXECUTE_SUCCESS 
